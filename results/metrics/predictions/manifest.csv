@@ -2,3 +2,4 @@ key,model
 logistic_regression,Logistic Regression
 random_forest,Random Forest
 xgboost,XGBoost
+rxt_(resnext-gru),RXT (ResNeXt-GRU)

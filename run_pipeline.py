@@ -130,7 +130,9 @@ def main():
 
     rxt_single = single_row.values.reshape(1, -1)
     rxt_batch = batch.values
-    size_bytes = efficiency.get_keras_model_disk_size(rxt_trained, config.RESULTS_MODELS_DIR / "rxt_resnext_gru_size_check.keras")
+    # RXT was already persisted by run_rxt_pipeline() above - measure that file
+    # directly rather than saving a second copy just for its size.
+    size_bytes = (config.RESULTS_MODELS_DIR / "rxt_resnext_gru.keras").stat().st_size
     rxt_record = efficiency.benchmark_model(
         "RXT (ResNeXt-GRU)", rxt_predict_fn, rxt_single, rxt_batch,
         train_time_sec=float("nan"), model_size_bytes=size_bytes,
