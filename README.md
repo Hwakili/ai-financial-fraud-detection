@@ -15,14 +15,14 @@ This repository is built incrementally, phase by phase, alongside the dissertati
 | Phase | Description | Status |
 |-------|--------------|--------|
 | 0 | Environment & repo setup | Done |
-| 1 | Data acquisition & EDA | Not started |
-| 2 | Preprocessing & imbalance handling | Not started |
-| 3 | Baseline models | Not started |
-| 4 | RXT (ResNeXt-embedded GRU) model | Not started |
-| 5 | Comparative evaluation | Not started |
-| 6 | Explainable AI (SHAP/LIME) | Not started |
-| 7 | Computational efficiency benchmarking | Not started |
-| 8 | Final repo polish | Not started |
+| 1 | Data acquisition & EDA | Done |
+| 2 | Preprocessing & imbalance handling | Done |
+| 3 | Baseline models (LR / RF / XGBoost) | Done |
+| 4 | RXT (ResNeXt-embedded GRU) model | Done |
+| 5 | Comparative evaluation | Done |
+| 6 | Explainable AI (SHAP/LIME) | Done |
+| 7 | Computational efficiency benchmarking | Done |
+| 8 | Final repo polish | Done |
 
 ## Repository structure
 
@@ -33,12 +33,17 @@ ai-fraud-detection/
 │   └── processed/      # train/test splits, scaled/resampled arrays
 ├── notebooks/          # exploratory notebooks (EDA, ad-hoc analysis)
 ├── src/
-│   ├── config.py       # shared paths, random seed, constants
-│   ├── preprocessing.py    # (Phase 2) split, scaling, imbalance handling
-│   ├── baseline_models.py  # (Phase 3) LR / RF / XGBoost
-│   ├── rxt_model.py        # (Phase 4) ResNeXt-embedded GRU
-│   ├── evaluate.py         # (Phase 3/5) shared metrics + evaluation pipeline
-│   └── explain.py          # (Phase 6) SHAP / LIME
+│   ├── config.py               # shared paths, random seed, constants
+│   ├── data_acquisition.py     # (Phase 1) Kaggle dataset download
+│   ├── eda.py                  # (Phase 1) EDA plots + summary stats
+│   ├── preprocessing.py        # (Phase 2) split, scaling, imbalance handling
+│   ├── baseline_models.py      # (Phase 3) LR / RF / XGBoost
+│   ├── rxt_model.py            # (Phase 4) ResNeXt-embedded GRU
+│   ├── evaluate.py             # (Phase 3-5) shared metrics + evaluation pipeline
+│   ├── comparative_evaluation.py   # (Phase 5) cross-model ROC/PR/bar charts
+│   ├── explain.py              # (Phase 6) SHAP / LIME
+│   └── efficiency.py           # (Phase 7) training/inference time, model size
+├── run_pipeline.py      # runs every phase end-to-end from a clean checkout
 ├── results/
 │   ├── figures/         # saved plots for the dissertation
 │   ├── metrics/         # CSV results tables
@@ -82,7 +87,48 @@ pytest tests/ -v
 
 ## How to run each script
 
-Instructions for each phase's scripts/notebooks will be added here as they are built.
+Run the whole pipeline end-to-end (from a clean checkout, once `creditcard.csv` is in
+`data/raw/`):
 
-- **Phase 0 (this phase):** no runnable script yet — `src/config.py` defines shared paths and
-  is imported by every later phase.
+```bash
+python run_pipeline.py
+```
+
+Or run each phase independently:
+
+```bash
+# Phase 1 — download + EDA (writes figures to results/figures/)
+python -m src.data_acquisition
+python -m src.eda
+# or: jupyter notebook notebooks/01_eda.ipynb
+
+# Phase 2 — split, scale, compare SMOTE / class-weighting / undersampling
+# (writes data/processed/{train,test}.csv and results/metrics/phase2_imbalance_comparison.csv)
+python -m src.preprocessing
+
+# Phase 3 — Logistic Regression, Random Forest, XGBoost
+# (appends to results/metrics/model_comparison.csv, saves models to results/models/)
+python -m src.baseline_models
+
+# Phase 4 — RXT (ResNeXt-embedded GRU): held-out test evaluation + 5-fold CV
+python -m src.rxt_model
+
+# Phase 5 — cross-model ROC/PR curves + grouped bar chart
+# (requires Phase 3 and Phase 4 to have been run first)
+python -m src.comparative_evaluation
+
+# Phase 6 / 7 — SHAP, LIME, and efficiency benchmarking are run together
+# as part of run_pipeline.py (they need trained model objects in memory);
+# see src/explain.py and src/efficiency.py for the underlying functions if
+# you want to call them directly on a specific model.
+```
+
+### Tests
+
+```bash
+pytest tests/ -v
+```
+
+Tests use small synthetic datasets (not the real download), so they run in seconds and
+without a Kaggle token - they check the pipeline logic (shapes, stratification, metric
+correctness), not real-world fraud-detection performance.
