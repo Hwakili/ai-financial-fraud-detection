@@ -17,6 +17,7 @@ import pandas as pd
 import seaborn as sns
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
     confusion_matrix,
     f1_score,
     matthews_corrcoef,
@@ -35,12 +36,19 @@ PREDICTIONS_MANIFEST = PREDICTIONS_DIR / "manifest.csv"
 
 
 def compute_metrics(y_true, y_pred, y_proba=None) -> dict:
-    """Accuracy, precision, recall, F1, AUC-ROC, MCC for one model's predictions.
+    """Accuracy, precision, recall, F1, AUC-ROC, PR-AUC, MCC for one model's predictions.
 
     Accuracy is included but is not the metric to optimise for: with a 0.172%
     fraud rate, a model that always predicts "genuine" scores ~99.8% accuracy
     while catching zero fraud. F1 and MCC are the metrics that matter here,
     per the ToR's evaluation plan.
+
+    PR-AUC (average precision) is tracked alongside ROC-AUC because ROC-AUC can
+    look deceptively strong under heavy class imbalance - it's dominated by the
+    huge true-negative count on the false-positive-rate axis. PR-AUC, built
+    from precision and recall directly, is far more sensitive to how the model
+    actually handles the rare positive (fraud) class, and is the more honest
+    single-number summary here.
     """
     metrics = {
         "accuracy": accuracy_score(y_true, y_pred),
@@ -50,7 +58,36 @@ def compute_metrics(y_true, y_pred, y_proba=None) -> dict:
         "mcc": matthews_corrcoef(y_true, y_pred),
     }
     metrics["auc_roc"] = roc_auc_score(y_true, y_proba) if y_proba is not None else np.nan
+    metrics["pr_auc"] = average_precision_score(y_true, y_proba) if y_proba is not None else np.nan
     return metrics
+
+
+def select_threshold(y_true, y_proba) -> float:
+    """Pick the classification threshold that maximises F1 on the given data.
+
+    MUST be called with validation-set labels/probabilities only, never the
+    test set - selecting a threshold on the same data used for final reporting
+    would let the threshold "see" the test set indirectly (a soft form of test
+    leakage), even though no training happens on it. The caller is responsible
+    for passing validation data in; this function has no way to enforce that
+    itself, hence the emphasis here rather than a runtime check.
+
+    Candidate thresholds are drawn from quantiles of the probability
+    distribution (concentrated in the 80th-99.95th percentile range) rather
+    than a fixed grid like np.linspace(0, 1, 100): with ~0.17% fraud, almost
+    all predicted probabilities cluster near 0, so a uniform grid wastes
+    nearly all its candidates on a region with no meaningful decision boundary.
+    A few small fixed candidates are added back in case a low threshold
+    genuinely does maximise F1 for a poorly-calibrated model.
+    """
+    y = np.asarray(y_true)
+    proba = np.asarray(y_proba)
+
+    candidates = np.unique(np.quantile(proba, np.linspace(0.80, 0.9995, 250)))
+    candidates = np.unique(np.concatenate(([0.01, 0.05, 0.1, 0.25, 0.5], candidates)))
+
+    scores = [f1_score(y, proba >= threshold, zero_division=0) for threshold in candidates]
+    return float(candidates[int(np.argmax(scores))])
 
 
 def plot_confusion_matrix(y_true, y_pred, model_name: str, save_dir=None):
@@ -192,7 +229,7 @@ def plot_grouped_bar_metrics(metrics_df: pd.DataFrame, save_path=None):
     """Grouped bar chart: each metric, side by side, across every model."""
     save_path = save_path or config.RESULTS_FIGURES_DIR / "grouped_metrics_comparison.png"
 
-    plot_metrics = ["precision", "recall", "f1", "auc_roc", "mcc"]
+    plot_metrics = ["precision", "recall", "f1", "auc_roc", "pr_auc", "mcc"]
     models = metrics_df["model"].tolist()
     n_models = len(models)
     n_metrics = len(plot_metrics)
@@ -217,9 +254,16 @@ def plot_grouped_bar_metrics(metrics_df: pd.DataFrame, save_path=None):
     return save_path
 
 
-def evaluate_model(model_name, y_true, y_pred, y_proba=None) -> dict:
-    """Convenience wrapper: compute metrics, save confusion matrix, update master CSV."""
+def evaluate_model(model_name, y_true, y_pred, y_proba=None, threshold: float = 0.5) -> dict:
+    """Convenience wrapper: compute metrics, save confusion matrix, update master CSV.
+
+    `threshold` is recorded in the metrics dict (and therefore the master CSV)
+    purely for transparency/reproducibility - it does not affect y_pred, which
+    the caller must already have thresholded before calling this. Defaults to
+    0.5 for callers that haven't done explicit threshold tuning.
+    """
     metrics = compute_metrics(y_true, y_pred, y_proba)
+    metrics["threshold"] = threshold
     plot_confusion_matrix(y_true, y_pred, model_name)
     append_metrics_to_master(metrics, model_name)
     return metrics

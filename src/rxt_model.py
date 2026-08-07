@@ -31,12 +31,12 @@ Design decisions (documented here for Chapter 4.4 / viva defence):
 
 import numpy as np
 import tensorflow as tf
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import StratifiedKFold
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
 
 from src import config
-from src.evaluate import compute_metrics, evaluate_model, save_predictions
+from src.evaluate import compute_metrics, evaluate_model, save_predictions, select_threshold
 
 tf.random.set_seed(config.RANDOM_SEED)
 
@@ -167,6 +167,16 @@ def train_rxt_kfold(
     Each fold trains a fresh model (no weight sharing across folds) and is
     evaluated through evaluate.compute_metrics - the same function used for
     every baseline - so fold results are directly comparable to Phase 3.
+
+    Threshold handling here is deliberately looser than run_rxt_pipeline()
+    below: each fold's held-out partition serves double duty as both the
+    early-stopping validation set and the data the fold is scored on, so
+    tuning the threshold on it too is a mild form of the same leakage the
+    three-way split elsewhere in this project exists to avoid. That's an
+    accepted simplification for this specific function because k-fold CV here
+    is a supplementary robustness check (Chapter 6.2's mean+/-std), not the
+    headline reported result - the properly separated val/test evaluation in
+    run_rxt_pipeline() is what belongs in the main model-comparison table.
     """
     import pandas as pd
 
@@ -192,9 +202,11 @@ def train_rxt_kfold(
         )
 
         y_proba = model.predict(reshape_for_rxt(X_fold_val), verbose=0).flatten()
-        y_pred = (y_proba >= 0.5).astype(int)
+        threshold = select_threshold(y_fold_val, y_proba)
+        y_pred = (y_proba >= threshold).astype(int)
 
         metrics = compute_metrics(y_fold_val, y_pred, y_proba)
+        metrics["threshold"] = threshold
         metrics["fold"] = fold_idx
         fold_results.append(metrics)
 
@@ -205,47 +217,49 @@ def train_rxt_kfold(
 def run_rxt_pipeline(
     X_train,
     y_train,
+    X_val,
+    y_val,
     X_test,
     y_test,
-    val_size: float = 0.1,
     class_weight: dict | None = None,
     epochs: int = 50,
     batch_size: int = 256,
     persist_model: bool = True,
     verbose: int = 0,
 ):
-    """Mirrors baseline_models.run_baseline_pipeline: train RXT (with an
-    internal stratified train/val split used only for early stopping),
-    evaluate once on the untouched held-out test set via the same evaluate.py
-    pipeline used for every baseline, and persist the model + predictions.
+    """Mirrors baseline_models.run_baseline_pipeline: train RXT using the
+    project's real validation split (for early stopping AND threshold tuning
+    - see evaluate.select_threshold), then evaluate once, at that one fixed
+    threshold, on the untouched held-out test set via the same evaluate.py
+    pipeline used for every baseline. Persists the model + predictions.
+
+    An earlier version of this function carved its own throwaway validation
+    split out of X_train and used a hardcoded 0.5 threshold. Now that
+    preprocessing.load_and_split() already produces a proper three-way
+    train/val/test split, reusing that validation set here - for both early
+    stopping and threshold selection - avoids a redundant extra split and
+    keeps every model (baselines and RXT alike) tuned against the same
+    validation data.
 
     This is the RXT result that belongs in the main model-comparison table
-    (Chapter 6.3) - directly comparable to the baselines because it is
-    evaluated on the identical test set. train_rxt_kfold() above is a
-    separate, supplementary robustness check (Chapter 6.2), not a replacement
-    for this held-out evaluation.
+    (Chapter 6.3) - directly comparable to the baselines because it is tuned
+    and evaluated the same way, on the same splits. train_rxt_kfold() above is
+    a separate, supplementary robustness check (Chapter 6.2), not a
+    replacement for this held-out evaluation.
     """
-    X_train_arr = X_train.values if hasattr(X_train, "values") else np.asarray(X_train)
-    y_train_arr = y_train.values if hasattr(y_train, "values") else np.asarray(y_train)
-
-    X_fit, X_val, y_fit, y_val = train_test_split(
-        X_train_arr,
-        y_train_arr,
-        test_size=val_size,
-        stratify=y_train_arr,
-        random_state=config.RANDOM_SEED,
-    )
-
     model, history = train_rxt(
-        X_fit, y_fit, X_val, y_val,
+        X_train, y_train, X_val, y_val,
         class_weight=class_weight, epochs=epochs, batch_size=batch_size, verbose=verbose,
     )
 
-    y_proba = model.predict(reshape_for_rxt(X_test), verbose=0).flatten()
-    y_pred = (y_proba >= 0.5).astype(int)
+    y_proba_val = model.predict(reshape_for_rxt(X_val), verbose=0).flatten()
+    threshold = select_threshold(y_val, y_proba_val)
 
-    metrics = evaluate_model("RXT (ResNeXt-GRU)", y_test, y_pred, y_proba)
-    save_predictions("RXT (ResNeXt-GRU)", y_test, y_proba)
+    y_proba_test = model.predict(reshape_for_rxt(X_test), verbose=0).flatten()
+    y_pred_test = (y_proba_test >= threshold).astype(int)
+
+    metrics = evaluate_model("RXT (ResNeXt-GRU)", y_test, y_pred_test, y_proba_test, threshold=threshold)
+    save_predictions("RXT (ResNeXt-GRU)", y_test, y_proba_test)
 
     if persist_model:
         config.ensure_directories()
@@ -267,10 +281,13 @@ if __name__ == "__main__":
     import pandas as pd
 
     train_df = pd.read_csv(config.DATA_PROCESSED_DIR / "train.csv")
+    val_df = pd.read_csv(config.DATA_PROCESSED_DIR / "val.csv")
     test_df = pd.read_csv(config.DATA_PROCESSED_DIR / "test.csv")
 
     X_train = train_df.drop(columns=[config.TARGET_COLUMN])
     y_train = train_df[config.TARGET_COLUMN]
+    X_val = val_df.drop(columns=[config.TARGET_COLUMN])
+    y_val = val_df[config.TARGET_COLUMN]
     X_test = test_df.drop(columns=[config.TARGET_COLUMN])
     y_test = test_df[config.TARGET_COLUMN]
 
@@ -279,7 +296,7 @@ if __name__ == "__main__":
     weights = compute_class_weights(y_train)
 
     _, metrics, _ = run_rxt_pipeline(
-        X_train, y_train, X_test, y_test, class_weight=weights, epochs=50
+        X_train, y_train, X_val, y_val, X_test, y_test, class_weight=weights, epochs=50
     )
     print("Held-out test set metrics:", metrics)
 

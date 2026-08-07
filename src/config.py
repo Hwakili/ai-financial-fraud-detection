@@ -28,6 +28,7 @@ TARGET_COLUMN = "Class"
 SCALED_COLUMNS = ["Time", "Amount"]
 
 TEST_SIZE = 0.2
+VAL_SIZE = 0.16  # of the whole dataset -> 64/16/20 train/val/test overall
 
 
 def ensure_directories() -> None:

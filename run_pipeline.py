@@ -40,9 +40,12 @@ def main():
     print(prep_result["comparison"])
 
     train_df = pd.read_csv(config.DATA_PROCESSED_DIR / "train.csv")
+    val_df = pd.read_csv(config.DATA_PROCESSED_DIR / "val.csv")
     test_df = pd.read_csv(config.DATA_PROCESSED_DIR / "test.csv")
     X_train = train_df.drop(columns=[config.TARGET_COLUMN])
     y_train = train_df[config.TARGET_COLUMN]
+    X_val = val_df.drop(columns=[config.TARGET_COLUMN])
+    y_val = val_df[config.TARGET_COLUMN]
     X_test = test_df.drop(columns=[config.TARGET_COLUMN])
     y_test = test_df[config.TARGET_COLUMN]
 
@@ -51,7 +54,9 @@ def main():
     print("\n" + "=" * 60)
     print("PHASE 3 — Baseline models")
     print("=" * 60)
-    models, baseline_metrics = baseline_models.run_baseline_pipeline(X_train, y_train, X_test, y_test)
+    models, baseline_metrics = baseline_models.run_baseline_pipeline(
+        X_train, y_train, X_val, y_val, X_test, y_test
+    )
     for name, metrics in baseline_metrics.items():
         print(name, metrics)
 
@@ -59,7 +64,7 @@ def main():
     print("PHASE 4 — RXT (ResNeXt-embedded GRU)")
     print("=" * 60)
     rxt_trained, rxt_metrics, _ = rxt_model.run_rxt_pipeline(
-        X_train, y_train, X_test, y_test, class_weight=class_weights, epochs=50
+        X_train, y_train, X_val, y_val, X_test, y_test, class_weight=class_weights, epochs=50
     )
     print("RXT held-out test metrics:", rxt_metrics)
 
@@ -101,12 +106,17 @@ def main():
 
     best_model_name = comparative_result["ranked_by_f1"].iloc[0]["model"]
     best_model = models[best_model_name]
-    y_pred_best = (
-        best_model.predict(X_test) if best_model_name != "RXT (ResNeXt-GRU)" else (rxt_predict_fn(X_test.values) >= 0.5).astype(int)
-    )
-    predict_proba_fn = (
-        best_model.predict_proba if best_model_name != "RXT (ResNeXt-GRU)" else rxt_predict_proba
-    )
+    all_metrics = {**baseline_metrics, "RXT (ResNeXt-GRU)": rxt_metrics}
+    best_threshold = all_metrics[best_model_name]["threshold"]
+
+    if best_model_name != "RXT (ResNeXt-GRU)":
+        y_proba_best = best_model.predict_proba(X_test)[:, 1]
+        predict_proba_fn = best_model.predict_proba
+    else:
+        y_proba_best = rxt_predict_fn(X_test.values)
+        predict_proba_fn = rxt_predict_proba
+    y_pred_best = (y_proba_best >= best_threshold).astype(int)
+
     explain.run_lime_on_instructive_cases(
         X_train.values, X_test, y_test, y_pred_best, predict_proba_fn, feature_names, best_model_name
     )
