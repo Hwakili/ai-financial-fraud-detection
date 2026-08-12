@@ -6,6 +6,7 @@ preprocessing can reuse load_data() without duplicating logic.
 """
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 
@@ -16,10 +17,37 @@ import seaborn as sns
 from src import config
 
 
+def validate_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    """Basic schema/quality check before anything downstream touches the data.
+
+    Catches the kind of problem that would otherwise surface as a confusing
+    error three phases later - a truncated download, a schema change, a
+    corrupted CSV - right at the point of loading instead.
+    """
+    required = config.EXPECTED_FEATURE_COLUMNS + [config.TARGET_COLUMN]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError(f"Dataset is missing expected columns: {missing}")
+
+    if df.empty:
+        raise ValueError("Dataset has no rows.")
+    if df[required].isnull().any().any():
+        raise ValueError("Dataset contains missing values in a required column.")
+    if not np.isfinite(df[config.EXPECTED_FEATURE_COLUMNS].to_numpy(dtype=float)).all():
+        raise ValueError("Dataset contains non-finite feature values (NaN/inf).")
+
+    classes = set(df[config.TARGET_COLUMN].unique())
+    if not classes.issubset({0, 1}):
+        raise ValueError(f"Class column must be binary (0/1); found {classes}.")
+
+    return df
+
+
 def load_data(path=None) -> pd.DataFrame:
-    """Load the raw dataset from disk."""
+    """Load and validate the raw dataset from disk."""
     path = path or config.RAW_DATA_FILE
-    return pd.read_csv(path)
+    df = pd.read_csv(path)
+    return validate_dataset(df)
 
 
 def summarize_dataset(df: pd.DataFrame) -> dict:

@@ -108,6 +108,19 @@ def test_append_metrics_to_master_upserts_by_model_name(tmp_path):
     assert updated_row["accuracy"] == 0.99
 
 
+def test_plot_amount_by_error_type_saves_file(tmp_path):
+    rng = np.random.default_rng(0)
+    n = 60
+    X_test = pd.DataFrame({"Amount": rng.exponential(scale=50, size=n)})
+    y_true = rng.integers(0, 2, size=n)
+    y_proba = rng.random(size=n)
+
+    path = evaluate.plot_amount_by_error_type(
+        X_test, y_true, y_proba, threshold=0.5, model_name="TestModel", save_path=tmp_path / "amount.png"
+    )
+    assert path.exists()
+
+
 def test_plot_roc_curves_saves_file(tmp_path):
     rng = np.random.default_rng(0)
     y_true = rng.integers(0, 2, size=100)

@@ -1,0 +1,30 @@
+{
+  "generated_at_utc": "2026-08-12T15:35:40.303240+00:00",
+  "dataset": {
+    "rows": 284807,
+    "fraud_rows": 492,
+    "fraud_rate_pct": 0.173
+  },
+  "split": {
+    "train_rows": 182276,
+    "val_rows": 45569,
+    "test_rows": 56962
+  },
+  "random_seed": 42,
+  "best_model": {
+    "model": "Random Forest",
+    "f1": 0.8663101604278075,
+    "mcc": 0.867098995293745,
+    "auc_roc": 0.95684108090338,
+    "threshold": 0.5
+  },
+  "environment": {
+    "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "platform": "Windows-10-10.0.26100-SP0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.5",
+    "scikit_learn": "1.9.0",
+    "xgboost": "3.2.0",
+    "tensorflow": "2.21.0"
+  }
+}

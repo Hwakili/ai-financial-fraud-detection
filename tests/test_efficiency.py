@@ -75,3 +75,18 @@ def test_build_efficiency_table_saves_csv(tmp_path):
     df = efficiency.build_efficiency_table(records, save_path=save_path)
     assert save_path.exists()
     assert len(df) == 2
+
+
+def test_plot_training_time_saves_file(tmp_path, monkeypatch):
+    from src import config
+    monkeypatch.setattr(config, "RESULTS_FIGURES_DIR", tmp_path)
+
+    df = pd.DataFrame(
+        [
+            {"model": "Logistic Regression", "train_time_sec": 2.3},
+            {"model": "Random Forest", "train_time_sec": 24.5},
+            {"model": "RXT", "train_time_sec": 2034.5},
+        ]
+    )
+    path = efficiency.plot_training_time(df, save_path=tmp_path / "training_time.png")
+    assert path.exists()

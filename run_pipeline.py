@@ -8,8 +8,16 @@ Usage:
     python run_pipeline.py
 """
 
+import json
+import platform
+import sys
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
+import sklearn
+import tensorflow as tf
+import xgboost
 
 from src import (
     baseline_models,
@@ -18,6 +26,7 @@ from src import (
     data_acquisition,
     eda,
     efficiency,
+    evaluate,
     explain,
     preprocessing,
     rxt_model,
@@ -120,6 +129,7 @@ def main():
     explain.run_lime_on_instructive_cases(
         X_train.values, X_test, y_test, y_pred_best, predict_proba_fn, feature_names, best_model_name
     )
+    evaluate.plot_amount_by_error_type(X_test, y_test, y_proba_best, best_threshold, best_model_name)
 
     print("\n" + "=" * 60)
     print("PHASE 7 — Computational efficiency benchmarking")
@@ -151,9 +161,44 @@ def main():
     records.append(rxt_record)
 
     efficiency_table = efficiency.build_efficiency_table(records)
+    efficiency.plot_training_time(efficiency_table)
     print(efficiency_table)
 
-    print("\nAll phases complete. See results/figures, results/metrics, results/models.")
+    # Provenance: what produced these results, and with what. Useful on its
+    # own, and it's the natural place to record whether this was a real run
+    # against the full dataset or something narrower.
+    best_row = comparative_result["ranked_by_f1"].iloc[0]
+    run_metadata = {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "dataset": {
+            "rows": int(len(df)),
+            "fraud_rows": int(df[config.TARGET_COLUMN].sum()),
+            "fraud_rate_pct": summary["fraud_rate_pct"],
+        },
+        "split": {"train_rows": len(X_train), "val_rows": len(X_val), "test_rows": len(X_test)},
+        "random_seed": config.RANDOM_SEED,
+        "best_model": {
+            "model": best_model_name,
+            "f1": float(best_row["f1"]),
+            "mcc": float(best_row["mcc"]),
+            "auc_roc": float(best_row["auc_roc"]),
+            "threshold": float(best_threshold),
+        },
+        "environment": {
+            "python": sys.version,
+            "platform": platform.platform(),
+            "numpy": np.__version__,
+            "pandas": pd.__version__,
+            "scikit_learn": sklearn.__version__,
+            "xgboost": xgboost.__version__,
+            "tensorflow": tf.__version__,
+        },
+    }
+    metadata_path = config.RESULTS_METRICS_DIR / "run_metadata.json"
+    metadata_path.write_text(json.dumps(run_metadata, indent=2), encoding="utf-8")
+
+    print(f"\nRun metadata written to {metadata_path}")
+    print("All phases complete. See results/figures, results/metrics, results/models.")
 
 
 if __name__ == "__main__":

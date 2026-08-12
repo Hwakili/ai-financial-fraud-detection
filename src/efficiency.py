@@ -15,6 +15,11 @@ import time
 from pathlib import Path
 
 import joblib
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from src import config
@@ -94,3 +99,28 @@ def build_efficiency_table(records: list, save_path=None) -> pd.DataFrame:
     df = pd.DataFrame(records)
     df.to_csv(save_path, index=False)
     return df
+
+
+def plot_training_time(efficiency_df: pd.DataFrame, save_path=None):
+    """Horizontal bar chart of training time across models.
+
+    Log-scaled on purpose: RXT takes minutes to train while the baselines
+    take single-digit seconds, so a linear axis would flatten the baseline
+    bars to nothing.
+    """
+    save_path = save_path or config.RESULTS_FIGURES_DIR / "training_time_comparison.png"
+    config.ensure_directories()
+
+    ranked = efficiency_df.sort_values("train_time_sec")
+
+    fig, ax = plt.subplots(figsize=(8, 0.6 * len(ranked) + 2))
+    ax.barh(ranked["model"], ranked["train_time_sec"])
+    ax.set_xscale("log")
+    ax.set_xlabel("Training time (seconds, log scale)")
+    ax.set_title("Training Time Comparison")
+    for i, value in enumerate(ranked["train_time_sec"]):
+        ax.text(value, i, f" {value:.1f}s", va="center")
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+    return save_path

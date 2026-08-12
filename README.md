@@ -43,10 +43,12 @@ ai-fraud-detection/
 │   ├── comparative_evaluation.py   # (Phase 5) cross-model ROC/PR/bar charts
 │   ├── explain.py              # (Phase 6) SHAP / LIME
 │   └── efficiency.py           # (Phase 7) training/inference time, model size
-├── run_pipeline.py      # runs every phase end-to-end from a clean checkout
+├── run_pipeline.py      # runs every phase end-to-end from a clean checkout,
+│                        # writes results/metrics/run_metadata.json at the end
 ├── results/
 │   ├── figures/         # saved plots for the dissertation
-│   ├── metrics/         # CSV results tables
+│   ├── metrics/         # CSV results tables + run_metadata.json (provenance:
+│   │                    # library/platform versions, split sizes, best model)
 │   └── models/          # trained model artefacts (gitignored - regenerate via scripts)
 ├── tests/               # pytest unit tests
 ├── requirements.txt
@@ -157,6 +159,18 @@ timed individually (`time.perf_counter()`) in `baseline_models.train_all_baselin
 `rxt_model.run_rxt_pipeline()`, and the real elapsed seconds are recorded in
 `results/metrics/efficiency_comparison.csv` alongside inference latency and model size - see
 CHANGELOG.md for the earlier gap this fixes (training time had been a hardcoded placeholder).
+`efficiency.plot_training_time()` renders this as a log-scaled bar chart, since RXT's training
+time is measured in minutes and the baselines' in single-digit seconds.
+
+**Dataset validation.** `eda.validate_dataset()` checks the expected columns are present, there
+are no missing/non-finite values, and the target is genuinely binary, before anything downstream
+touches the data. Called automatically by `eda.load_data()` - a truncated download or schema
+change fails loudly at load time instead of surfacing as a confusing error two phases later.
+
+**Error analysis by transaction amount.** `evaluate.plot_amount_by_error_type()` produces a box
+plot of transaction Amount split by TP/FN/FP/TN outcome for the best-performing model - a
+systematic view of error patterns across the whole test set, complementing the individual
+LIME explanations in Phase 6.
 
 ## Results (real run against the full dataset)
 
@@ -168,54 +182,64 @@ CHANGELOG.md for the earlier gap this fixes (training time had been a hardcoded 
 > validation set and applied once to the held-out test set.
 
 Held-out test set (56,962 rows, stratified from the 64/16/20 split), full
-`results/metrics/model_comparison.csv`:
+`results/metrics/model_comparison.csv` (most recent run):
 
 | Model | Precision | Recall | F1 | MCC | AUC-ROC | PR-AUC | Threshold |
 |---|---|---|---|---|---|---|---|
 | Random Forest | 0.910 | 0.827 | **0.866** | **0.867** | 0.957 | 0.843 | 0.500 |
 | XGBoost | 0.880 | 0.827 | 0.853 | 0.853 | 0.976 | 0.874 | 0.500 |
 | Logistic Regression | 0.852 | 0.765 | 0.806 | 0.807 | 0.974 | 0.712 | 1.000* |
-| RXT (ResNeXt-GRU) | 0.784 | 0.704 | 0.742 | 0.743 | 0.962 | 0.658 | 0.994 |
+| RXT (ResNeXt-GRU) | 0.714 | 0.612 | 0.659 | 0.661 | 0.964 | 0.614 | 0.988 |
 
 \* Logistic Regression's tuned threshold is 0.9999999993, not literally 1.0 — its
 `class_weight='balanced'` training pushes predicted probabilities heavily toward the extremes,
 so the F1-maximising cut lands right up against the top of the range.
 
-RXT's 5-fold cross-validation summary (`results/metrics/rxt_kfold_summary.csv`, a supplementary
-robustness check — see CHANGELOG.md for why its threshold handling is looser than the table
-above): F1 = 0.685 ± 0.086, MCC = 0.691 ± 0.088, AUC-ROC = 0.963 ± 0.017 across folds — consistent
-with the held-out test result, i.e. not a lucky single split. (These numbers move slightly run to
-run - TF/Keras training on CPU isn't perfectly deterministic even with a fixed seed - but the
-overall picture, RXT competitive with but behind the tree ensembles, holds consistently.)
+**RXT's numbers move noticeably between runs** (F1 has ranged 0.66-0.74 across identical-seed
+reruns during development) - TF/Keras training on CPU isn't perfectly deterministic, and because
+early stopping halts training at whatever epoch validation loss stops improving, a different
+stopping point changes both the model's final accuracy *and* its measured training time together.
+For the dissertation, treat RXT's 5-fold cross-validation summary
+(`results/metrics/rxt_kfold_summary.csv`) as the more stable reference point rather than any
+single run: **F1 = 0.691 ± 0.072, MCC = 0.696 ± 0.074, AUC-ROC = 0.957 ± 0.025** across folds.
+That range comfortably contains every single-run result observed so far, which is itself worth
+stating explicitly - it shows the single held-out test figure is a plausible draw from a real
+distribution, not a fluke in either direction.
 
-**Headline finding:** all four models are now much closer together than before threshold tuning.
-Random Forest and XGBoost still lead on F1/MCC, but Logistic Regression and RXT — the two models
-whose `class_weight='balanced'` training most distorted their probability outputs — improved
-dramatically once evaluated at their own properly-tuned thresholds rather than an arbitrary 0.5.
-This is worth stating plainly in the dissertation: **the earlier "tree ensembles crush RXT"
-result was substantially a thresholding artefact, not a genuine architecture gap.** RXT remains
-behind the tree ensembles, but the gap is now ~0.12 F1 (0.866 vs 0.742), not 0.60.
+**Headline finding:** all four models are now much closer together than before threshold tuning
+(see the fixed-threshold bug below). Random Forest and XGBoost lead on F1/MCC; Logistic Regression
+closed most of its gap once evaluated at its own tuned threshold instead of an arbitrary 0.5. RXT
+sits behind the tree ensembles on F1/MCC despite a competitive AUC-ROC (~0.96) - a genuine,
+defensible finding to discuss critically rather than a bug: on this dataset, gradient-boosted
+trees appear to extract more of the available signal into a hard precision/recall trade-off than
+RXT does at a matched threshold, which is consistent with a broader pattern in recent literature
+of tree ensembles being highly competitive with, and sometimes beating, deep learning on tabular
+data (worth citing and engaging with directly in the literature review/discussion).
 
 **Computational efficiency** (`results/metrics/efficiency_comparison.csv`, real measured values -
-see CHANGELOG for a bug that previously left training time unmeasured):
+see CHANGELOG for a bug that previously left training time unmeasured; `plot_training_time()` in
+`results/figures/training_time_comparison.png` visualises this on a log scale):
 
 | Model | Train time | Inference (1 txn) | Inference (1,000 txns) | Model size | Params |
 |---|---|---|---|---|---|
-| Logistic Regression | 2.3s | 1.7 ms | 0.001s | 1.5 KB | — |
-| XGBoost | 3.9s | 5.5 ms | 0.006s | 220 KB | — |
-| Random Forest | 24.5s | 39.6 ms | 0.052s | 4.1 MB | — |
-| RXT (ResNeXt-GRU) | **2034s (~34 min)** | 94.0 ms | 0.349s | 579 KB | 38,145 |
+| Logistic Regression | 1.5s | 1.3 ms | 0.001s | 1.5 KB | — |
+| XGBoost | 2.1s | 5.6 ms | 0.008s | 220 KB | — |
+| Random Forest | 15.2s | 31.6 ms | 0.041s | 4.1 MB | — |
+| RXT (ResNeXt-GRU) | **1141s (~19 min)** | 75.6 ms | 0.283s | 579 KB | 38,145 |
 
-This is the real accuracy-vs-efficiency trade-off your ToR's evaluation plan asks for: RXT takes
-83-880x longer to train than the baselines and is 2.4-55x slower at inference, for an F1 result
-that trails XGBoost and Random Forest rather than beating them. That's a legitimate, defensible
-finding to discuss critically in Chapter 6.5/7 - it does **not** mean RXT was a wasted effort; it
-means the dissertation's discussion should honestly weigh whether RXT's architectural
-sophistication is justified for this dataset/deployment scenario, which is precisely the kind of
-"sound justification for the approach adopted" the assignment brief's top marking band rewards.
-Training was CPU-only here (see the GPU note below) - Random Forest's training time in particular
-would very likely change on different hardware, but RXT's order-of-magnitude gap over every
-baseline is large enough that it would very likely persist even on GPU.
+RXT's own training time varies run to run in the same way its accuracy does (observed range
+~19-34 minutes across reruns here) - fewer/more epochs before early stopping means both a shorter
+run and a less-converged model together, which is itself a useful thing to note in the discussion
+chapter rather than something to paper over. Even at the low end of that range, RXT still takes
+75-750x longer to train than the baselines and is 2.4-56x slower at inference, for an F1 result
+that trails XGBoost and Random Forest. That's a legitimate, defensible finding to discuss
+critically in Chapter 6.5/7 - it does **not** mean RXT was a wasted effort; it means the
+dissertation's discussion should honestly weigh whether RXT's architectural sophistication is
+justified for this dataset/deployment scenario, which is precisely the kind of "sound
+justification for the approach adopted" the assignment brief's top marking band rewards. Training
+was CPU-only here (see the GPU note below) - Random Forest's training time in particular would
+very likely change on different hardware, but RXT's order-of-magnitude gap over every baseline is
+large enough that it would very likely persist even on GPU.
 
 **RXT training note:** this repository's RXT numbers were produced on a CPU-only machine
 (~3-4 minutes/epoch on the full training set). Your ToR's resource plan specifies Google Colab
@@ -225,6 +249,7 @@ epoch budget; treat the numbers above as a real, working result rather than the 
 GPU-tuned figures for the dissertation.
 
 All figures (confusion matrices, ROC/PR curves, grouped metric comparison, SHAP summaries, LIME
-explanations) are in `results/figures/`; the 5-fold CV summary for RXT is in
-`results/metrics/rxt_kfold_summary.csv`; efficiency numbers are in
-`results/metrics/efficiency_comparison.csv`.
+explanations, the amount-by-error-type box plot, the training-time chart) are in
+`results/figures/`; the 5-fold CV summary for RXT is in `results/metrics/rxt_kfold_summary.csv`;
+efficiency numbers are in `results/metrics/efficiency_comparison.csv`; full run provenance
+(library/platform versions, split sizes, best model) is in `results/metrics/run_metadata.json`.

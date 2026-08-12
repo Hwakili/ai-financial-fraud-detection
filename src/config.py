@@ -26,6 +26,7 @@ RANDOM_SEED = 42
 
 TARGET_COLUMN = "Class"
 SCALED_COLUMNS = ["Time", "Amount"]
+EXPECTED_FEATURE_COLUMNS = ["Time"] + [f"V{i}" for i in range(1, 29)] + ["Amount"]
 
 TEST_SIZE = 0.2
 VAL_SIZE = 0.16  # of the whole dataset -> 64/16/20 train/val/test overall

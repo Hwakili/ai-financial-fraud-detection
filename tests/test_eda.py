@@ -25,6 +25,36 @@ def synthetic_df():
     return pd.DataFrame(data)
 
 
+def test_validate_dataset_accepts_well_formed_data(synthetic_df):
+    result = eda.validate_dataset(synthetic_df)
+    assert result is synthetic_df
+
+
+def test_validate_dataset_rejects_missing_column(synthetic_df):
+    broken = synthetic_df.drop(columns=["V1"])
+    with pytest.raises(ValueError, match="missing expected columns"):
+        eda.validate_dataset(broken)
+
+
+def test_validate_dataset_rejects_nulls(synthetic_df):
+    broken = synthetic_df.copy()
+    broken.loc[0, "Amount"] = np.nan
+    with pytest.raises(ValueError, match="missing values"):
+        eda.validate_dataset(broken)
+
+
+def test_validate_dataset_rejects_non_binary_class(synthetic_df):
+    broken = synthetic_df.copy()
+    broken.loc[0, "Class"] = 2
+    with pytest.raises(ValueError, match="binary"):
+        eda.validate_dataset(broken)
+
+
+def test_validate_dataset_rejects_empty_frame(synthetic_df):
+    with pytest.raises(ValueError, match="no rows"):
+        eda.validate_dataset(synthetic_df.iloc[0:0])
+
+
 def test_summarize_dataset_reports_correct_shape_and_fraud_rate(synthetic_df):
     summary = eda.summarize_dataset(synthetic_df)
     assert summary["shape"] == (205, 31)

@@ -254,6 +254,40 @@ def plot_grouped_bar_metrics(metrics_df: pd.DataFrame, save_path=None):
     return save_path
 
 
+def plot_amount_by_error_type(X_test, y_true, y_proba, threshold: float, model_name: str, save_path=None):
+    """Box plot of transaction Amount, grouped by TP/FN/FP/TN outcome.
+
+    This is the error-analysis view the confusion matrix alone doesn't give
+    you: whether missed fraud (false negatives) tends to involve larger or
+    smaller amounts than caught fraud, and whether false positives cluster
+    around particular amounts. Log scale on the y-axis since Amount is
+    heavily right-skewed (most transactions are small, a long tail is large).
+    """
+    save_path = save_path or config.RESULTS_FIGURES_DIR / f"amount_by_error_type_{model_name.lower().replace(' ', '_')}.png"
+
+    y_true = np.asarray(y_true)
+    y_pred = (np.asarray(y_proba) >= threshold).astype(int)
+
+    outcome = np.full(len(y_true), "True Negative", dtype=object)
+    outcome[(y_true == 0) & (y_pred == 1)] = "False Positive"
+    outcome[(y_true == 1) & (y_pred == 0)] = "False Negative"
+    outcome[(y_true == 1) & (y_pred == 1)] = "True Positive"
+
+    amounts = np.asarray(X_test["Amount"])
+    order = ["True Positive", "False Negative", "False Positive", "True Negative"]
+    grouped = [amounts[outcome == label] for label in order]
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    ax.boxplot(grouped, tick_labels=order, showfliers=False)
+    ax.set_yscale("symlog", linthresh=1)
+    ax.set_ylabel("Transaction Amount (symlog scale)")
+    ax.set_title(f"Transaction Amount by Classification Outcome — {model_name}")
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+    return save_path
+
+
 def evaluate_model(
     model_name, y_true, y_pred, y_proba=None, threshold: float = 0.5, train_time_sec: float | None = None
 ) -> dict:

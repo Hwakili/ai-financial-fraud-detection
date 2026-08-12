@@ -1,5 +1,30 @@
 # Changelog
 
+## [Unreleased] — ported error-analysis, training-time chart, dataset validation, run provenance
+
+Hamza built a separate, independent version of this project overnight (different codebase, no
+RXT - a plain PyTorch GRU only, so it doesn't stand in for this repo). Compared the two and
+ported four specific, self-contained improvements worth having here; left the bigger design
+differences (a full factorial model x imbalance-strategy sweep, a `--smoke-test` mode) for a
+later decision since they change scope/runtime meaningfully.
+
+### Added
+
+- `evaluate.plot_amount_by_error_type()` - box plot of transaction Amount split by
+  TP/FN/FP/TN outcome for the best model. Answers a real question the confusion matrix alone
+  doesn't: does missed fraud (false negatives) skew toward larger or smaller amounts than caught
+  fraud? Directly responds to "Error Analysis" being named as a required evaluation technique in
+  the Topic Proposal.
+- `efficiency.plot_training_time()` - log-scaled horizontal bar chart of training time across
+  models (RXT's ~34 minutes vs the baselines' single-digit seconds would flatten a linear-scale
+  chart to nothing).
+- `eda.validate_dataset()` - schema/null/finite/binary-label check, run automatically inside
+  `eda.load_data()`. Catches a truncated download or schema drift at load time instead of a
+  confusing failure two phases downstream.
+- `results/metrics/run_metadata.json`, written at the end of `run_pipeline.py` - dataset size,
+  split sizes, the best model's headline metrics, and exact library/platform versions for the run
+  that produced the committed results. Basic provenance, not tied to any one phase's module.
+
 ## [Unreleased] — ToR compliance audit: training time was never actually measured
 
 Cross-checked the repository directly against the signed Terms of Reference (not just the
