@@ -45,10 +45,13 @@ def test_train_xgboost_fits_and_predicts(synthetic_split):
     assert len(preds) == len(X_test)
 
 
-def test_train_all_baselines_returns_three_models(synthetic_split):
+def test_train_all_baselines_returns_three_models_and_their_train_times(synthetic_split):
     X_train, X_val, X_test, y_train, y_val, y_test = synthetic_split
-    models = baseline_models.train_all_baselines(X_train, y_train)
+    models, train_times = baseline_models.train_all_baselines(X_train, y_train)
     assert set(models.keys()) == {"Logistic Regression", "Random Forest", "XGBoost"}
+    assert set(train_times.keys()) == {"Logistic Regression", "Random Forest", "XGBoost"}
+    for elapsed in train_times.values():
+        assert elapsed >= 0
 
 
 def test_run_baseline_pipeline_returns_models_and_metrics(tmp_path, monkeypatch, synthetic_split):
@@ -69,6 +72,7 @@ def test_run_baseline_pipeline_returns_models_and_metrics(tmp_path, monkeypatch,
         assert "mcc" in metrics
         assert "pr_auc" in metrics
         assert "threshold" in metrics
+        assert metrics["train_time_sec"] >= 0, "training time must be a real measured value, not NaN/missing"
 
 
 def test_run_baseline_pipeline_threshold_is_tuned_on_validation_not_test(tmp_path, monkeypatch, synthetic_split):

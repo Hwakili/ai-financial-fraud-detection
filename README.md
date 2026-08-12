@@ -151,6 +151,13 @@ majority count) rather than a full 1:1 rebalance. This is a design decision docu
 precision collapse; see `results/metrics/phase2_imbalance_comparison.csv` for the empirical
 comparison.
 
+**Training time is measured, not estimated.** The ToR's evaluation plan (Section 6) explicitly
+requires training time and inference speed to both be measured. Each model's `.fit()` call is
+timed individually (`time.perf_counter()`) in `baseline_models.train_all_baselines()` and
+`rxt_model.run_rxt_pipeline()`, and the real elapsed seconds are recorded in
+`results/metrics/efficiency_comparison.csv` alongside inference latency and model size - see
+CHANGELOG.md for the earlier gap this fixes (training time had been a hardcoded placeholder).
+
 ## Results (real run against the full dataset)
 
 > **These numbers supersede an earlier version of this README.** The previous results were
@@ -168,7 +175,7 @@ Held-out test set (56,962 rows, stratified from the 64/16/20 split), full
 | Random Forest | 0.910 | 0.827 | **0.866** | **0.867** | 0.957 | 0.843 | 0.500 |
 | XGBoost | 0.880 | 0.827 | 0.853 | 0.853 | 0.976 | 0.874 | 0.500 |
 | Logistic Regression | 0.852 | 0.765 | 0.806 | 0.807 | 0.974 | 0.712 | 1.000* |
-| RXT (ResNeXt-GRU) | 0.817 | 0.684 | 0.744 | 0.747 | 0.972 | 0.707 | 0.999 |
+| RXT (ResNeXt-GRU) | 0.784 | 0.704 | 0.742 | 0.743 | 0.962 | 0.658 | 0.994 |
 
 \* Logistic Regression's tuned threshold is 0.9999999993, not literally 1.0 — its
 `class_weight='balanced'` training pushes predicted probabilities heavily toward the extremes,
@@ -176,8 +183,10 @@ so the F1-maximising cut lands right up against the top of the range.
 
 RXT's 5-fold cross-validation summary (`results/metrics/rxt_kfold_summary.csv`, a supplementary
 robustness check — see CHANGELOG.md for why its threshold handling is looser than the table
-above): F1 = 0.687 ± 0.084, MCC = 0.691 ± 0.085, AUC-ROC = 0.963 ± 0.019 across folds — consistent
-with the held-out test result, i.e. not a lucky single split.
+above): F1 = 0.685 ± 0.086, MCC = 0.691 ± 0.088, AUC-ROC = 0.963 ± 0.017 across folds — consistent
+with the held-out test result, i.e. not a lucky single split. (These numbers move slightly run to
+run - TF/Keras training on CPU isn't perfectly deterministic even with a fixed seed - but the
+overall picture, RXT competitive with but behind the tree ensembles, holds consistently.)
 
 **Headline finding:** all four models are now much closer together than before threshold tuning.
 Random Forest and XGBoost still lead on F1/MCC, but Logistic Regression and RXT — the two models
@@ -185,10 +194,28 @@ whose `class_weight='balanced'` training most distorted their probability output
 dramatically once evaluated at their own properly-tuned thresholds rather than an arbitrary 0.5.
 This is worth stating plainly in the dissertation: **the earlier "tree ensembles crush RXT"
 result was substantially a thresholding artefact, not a genuine architecture gap.** RXT remains
-behind the tree ensembles, but the gap is now 0.12 F1 (0.866 vs 0.744), not 0.60. The residual gap
-is a more defensible, more interesting finding to discuss critically than the pre-fix numbers
-were — e.g. RXT's recall (0.684) trails its precision (0.817) by less than the tree ensembles'
-gap, suggesting a different precision/recall balance rather than simply "worse."
+behind the tree ensembles, but the gap is now ~0.12 F1 (0.866 vs 0.742), not 0.60.
+
+**Computational efficiency** (`results/metrics/efficiency_comparison.csv`, real measured values -
+see CHANGELOG for a bug that previously left training time unmeasured):
+
+| Model | Train time | Inference (1 txn) | Inference (1,000 txns) | Model size | Params |
+|---|---|---|---|---|---|
+| Logistic Regression | 2.3s | 1.7 ms | 0.001s | 1.5 KB | — |
+| XGBoost | 3.9s | 5.5 ms | 0.006s | 220 KB | — |
+| Random Forest | 24.5s | 39.6 ms | 0.052s | 4.1 MB | — |
+| RXT (ResNeXt-GRU) | **2034s (~34 min)** | 94.0 ms | 0.349s | 579 KB | 38,145 |
+
+This is the real accuracy-vs-efficiency trade-off your ToR's evaluation plan asks for: RXT takes
+83-880x longer to train than the baselines and is 2.4-55x slower at inference, for an F1 result
+that trails XGBoost and Random Forest rather than beating them. That's a legitimate, defensible
+finding to discuss critically in Chapter 6.5/7 - it does **not** mean RXT was a wasted effort; it
+means the dissertation's discussion should honestly weigh whether RXT's architectural
+sophistication is justified for this dataset/deployment scenario, which is precisely the kind of
+"sound justification for the approach adopted" the assignment brief's top marking band rewards.
+Training was CPU-only here (see the GPU note below) - Random Forest's training time in particular
+would very likely change on different hardware, but RXT's order-of-magnitude gap over every
+baseline is large enough that it would very likely persist even on GPU.
 
 **RXT training note:** this repository's RXT numbers were produced on a CPU-only machine
 (~3-4 minutes/epoch on the full training set). Your ToR's resource plan specifies Google Colab

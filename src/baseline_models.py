@@ -6,6 +6,8 @@ plan: "Advanced deep learning models will be benchmarked against traditional
 classifiers to quantify performance gains and justify architectural complexity").
 """
 
+import time
+
 import joblib
 from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -51,12 +53,27 @@ def train_xgboost(X_train, y_train) -> XGBClassifier:
     return model
 
 
-def train_all_baselines(X_train, y_train) -> dict:
-    return {
-        "Logistic Regression": train_logistic_regression(X_train, y_train),
-        "Random Forest": train_random_forest(X_train, y_train),
-        "XGBoost": train_xgboost(X_train, y_train),
+def train_all_baselines(X_train, y_train) -> tuple:
+    """Train every baseline, timing each model's fit() call individually.
+
+    Returns (models_dict, train_times_dict) rather than folding timing into
+    the models themselves, so callers that just want trained models (e.g. a
+    quick experiment) aren't forced to also handle timing data.
+    """
+    trainers = {
+        "Logistic Regression": train_logistic_regression,
+        "Random Forest": train_random_forest,
+        "XGBoost": train_xgboost,
     }
+
+    models = {}
+    train_times = {}
+    for name, trainer in trainers.items():
+        start = time.perf_counter()
+        models[name] = trainer(X_train, y_train)
+        train_times[name] = time.perf_counter() - start
+
+    return models, train_times
 
 
 def run_baseline_pipeline(X_train, y_train, X_val, y_val, X_test, y_test, persist_models: bool = True) -> tuple:
@@ -77,7 +94,7 @@ def run_baseline_pipeline(X_train, y_train, X_val, y_val, X_test, y_test, persis
     Models are also persisted to results/models/ (joblib) so Phase 6 (SHAP)
     and Phase 7 (efficiency) can reload them without retraining.
     """
-    models = train_all_baselines(X_train, y_train)
+    models, train_times = train_all_baselines(X_train, y_train)
     results = {}
 
     for name, model in models.items():
@@ -87,7 +104,9 @@ def run_baseline_pipeline(X_train, y_train, X_val, y_val, X_test, y_test, persis
         y_proba_test = model.predict_proba(X_test)[:, 1]
         y_pred_test = (y_proba_test >= threshold).astype(int)
 
-        results[name] = evaluate_model(name, y_test, y_pred_test, y_proba_test, threshold=threshold)
+        results[name] = evaluate_model(
+            name, y_test, y_pred_test, y_proba_test, threshold=threshold, train_time_sec=train_times[name]
+        )
         save_predictions(name, y_test, y_proba_test)
 
         if persist_models:

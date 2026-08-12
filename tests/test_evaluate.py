@@ -75,9 +75,13 @@ def test_evaluate_model_records_threshold(tmp_path, monkeypatch):
 
     metrics_default = evaluate.evaluate_model("ModelA", y_true, y_pred, y_proba)
     assert metrics_default["threshold"] == 0.5
+    assert np.isnan(metrics_default["train_time_sec"]), "no train_time_sec passed -> must be NaN, not silently 0"
 
-    metrics_tuned = evaluate.evaluate_model("ModelB", y_true, y_pred, y_proba, threshold=0.63)
+    metrics_tuned = evaluate.evaluate_model(
+        "ModelB", y_true, y_pred, y_proba, threshold=0.63, train_time_sec=12.5
+    )
     assert metrics_tuned["threshold"] == 0.63
+    assert metrics_tuned["train_time_sec"] == 12.5
 
 
 def test_plot_confusion_matrix_saves_file(tmp_path):

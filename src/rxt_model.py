@@ -29,6 +29,8 @@ Design decisions (documented here for Chapter 4.4 / viva defence):
   the ToR's explicitly flagged overfitting risk for this architecture.
 """
 
+import time
+
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import StratifiedKFold
@@ -247,10 +249,12 @@ def run_rxt_pipeline(
     a separate, supplementary robustness check (Chapter 6.2), not a
     replacement for this held-out evaluation.
     """
+    start = time.perf_counter()
     model, history = train_rxt(
         X_train, y_train, X_val, y_val,
         class_weight=class_weight, epochs=epochs, batch_size=batch_size, verbose=verbose,
     )
+    train_time_sec = time.perf_counter() - start
 
     y_proba_val = model.predict(reshape_for_rxt(X_val), verbose=0).flatten()
     threshold = select_threshold(y_val, y_proba_val)
@@ -258,7 +262,9 @@ def run_rxt_pipeline(
     y_proba_test = model.predict(reshape_for_rxt(X_test), verbose=0).flatten()
     y_pred_test = (y_proba_test >= threshold).astype(int)
 
-    metrics = evaluate_model("RXT (ResNeXt-GRU)", y_test, y_pred_test, y_proba_test, threshold=threshold)
+    metrics = evaluate_model(
+        "RXT (ResNeXt-GRU)", y_test, y_pred_test, y_proba_test, threshold=threshold, train_time_sec=train_time_sec
+    )
     save_predictions("RXT (ResNeXt-GRU)", y_test, y_proba_test)
 
     if persist_model:

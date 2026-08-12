@@ -134,7 +134,7 @@ def main():
         size_bytes = efficiency.get_sklearn_model_disk_size(model, config.RESULTS_MODELS_DIR / f"{key}.joblib")
         record = efficiency.benchmark_model(
             name, model.predict, single_row, batch,
-            train_time_sec=float("nan"), model_size_bytes=size_bytes,
+            train_time_sec=baseline_metrics[name]["train_time_sec"], model_size_bytes=size_bytes,
         )
         records.append(record)
 
@@ -145,7 +145,7 @@ def main():
     size_bytes = (config.RESULTS_MODELS_DIR / "rxt_resnext_gru.keras").stat().st_size
     rxt_record = efficiency.benchmark_model(
         "RXT (ResNeXt-GRU)", rxt_predict_fn, rxt_single, rxt_batch,
-        train_time_sec=float("nan"), model_size_bytes=size_bytes,
+        train_time_sec=rxt_metrics["train_time_sec"], model_size_bytes=size_bytes,
         param_count=rxt_trained.count_params(),
     )
     records.append(rxt_record)

@@ -1,5 +1,5 @@
 model,train_time_sec,inference_time_single_ms,inference_time_batch_sec,batch_size,model_size_kb,param_count
-Logistic Regression,,1.3984,0.0013,1000,1.5,
-Random Forest,,30.6626,0.0291,1000,4096.4,
-XGBoost,,5.7947,0.008,1000,219.86,
-RXT (ResNeXt-GRU),,73.1686,0.2717,1000,579.32,38145.0
+Logistic Regression,2.3142,1.7316,0.0014,1000,1.5,
+Random Forest,24.487,39.6071,0.0523,1000,4096.4,
+XGBoost,3.8763,5.5231,0.0058,1000,219.86,
+RXT (ResNeXt-GRU),2034.4518,94.0339,0.349,1000,579.32,38145.0

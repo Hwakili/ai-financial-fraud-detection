@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased] — ToR compliance audit: training time was never actually measured
+
+Cross-checked the repository directly against the signed Terms of Reference (not just the
+paraphrased coding guide) and found one concrete gap: Section 6 (Evaluation Plan) explicitly
+requires *"Training time and inference speed will be measured to assess suitability for real-time
+fraud monitoring environments."* Inference speed was measured correctly, but training time was a
+hardcoded `NaN` in every row of `results/metrics/efficiency_comparison.csv` — the timing utility
+(`efficiency.measure_training_time()`) existed but was never actually wired up to a real
+`model.fit()` call.
+
+### Fixed
+
+- `src/evaluate.py::evaluate_model()` now accepts and records a `train_time_sec` argument
+  (defaults to `NaN` if not supplied, so this fails visibly rather than silently reporting a fake
+  zero).
+- `src/baseline_models.py::train_all_baselines()` now times each of the three `.fit()` calls
+  individually with `time.perf_counter()` and returns `(models, train_times)` instead of just
+  `models`. `run_baseline_pipeline()` passes each model's real elapsed training time into
+  `evaluate_model()`.
+- `src/rxt_model.py::run_rxt_pipeline()` now times its `train_rxt()` call the same way and passes
+  the real elapsed seconds into `evaluate_model()`.
+- `run_pipeline.py`'s Phase 7 efficiency benchmarking now reads the real measured training time
+  out of each model's metrics dict instead of passing a hardcoded `float("nan")`.
+- Real measured training times (see Results section of README for the current numbers) replace
+  the `NaN` placeholders in `results/metrics/efficiency_comparison.csv`.
+
 ## [Unreleased] — merge of threshold tuning, three-way split, PR-AUC, tuned resampling ratios
 
 Merged a set of correctness/methodology improvements from a second, parallel version of this

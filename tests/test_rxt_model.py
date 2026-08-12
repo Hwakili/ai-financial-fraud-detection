@@ -95,6 +95,7 @@ def test_run_rxt_pipeline_returns_model_metrics_and_uses_validation_split(tmp_pa
     assert "f1" in metrics
     assert "pr_auc" in metrics
     assert "threshold" in metrics
+    assert metrics["train_time_sec"] >= 0, "training time must be a real measured value, not NaN/missing"
 
     y_proba_val = model.predict(rxt_model.reshape_for_rxt(X_val), verbose=0).flatten()
     expected_threshold = evaluate.select_threshold(y_val, y_proba_val)

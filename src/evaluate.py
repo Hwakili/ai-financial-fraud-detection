@@ -254,16 +254,28 @@ def plot_grouped_bar_metrics(metrics_df: pd.DataFrame, save_path=None):
     return save_path
 
 
-def evaluate_model(model_name, y_true, y_pred, y_proba=None, threshold: float = 0.5) -> dict:
+def evaluate_model(
+    model_name, y_true, y_pred, y_proba=None, threshold: float = 0.5, train_time_sec: float | None = None
+) -> dict:
     """Convenience wrapper: compute metrics, save confusion matrix, update master CSV.
 
     `threshold` is recorded in the metrics dict (and therefore the master CSV)
     purely for transparency/reproducibility - it does not affect y_pred, which
     the caller must already have thresholded before calling this. Defaults to
     0.5 for callers that haven't done explicit threshold tuning.
+
+    `train_time_sec` is likewise recorded for transparency - the ToR's
+    evaluation plan explicitly requires training time to be measured (Section
+    6: "Training time and inference speed will be measured to assess
+    suitability for real-time fraud monitoring environments"). Callers must
+    time their own model.fit() call and pass the elapsed seconds in here;
+    defaults to NaN for callers that haven't (e.g. Phase 2's quick imbalance
+    comparison, which times itself separately and isn't part of the
+    computational-efficiency benchmark).
     """
     metrics = compute_metrics(y_true, y_pred, y_proba)
     metrics["threshold"] = threshold
+    metrics["train_time_sec"] = train_time_sec if train_time_sec is not None else np.nan
     plot_confusion_matrix(y_true, y_pred, model_name)
     append_metrics_to_master(metrics, model_name)
     return metrics
