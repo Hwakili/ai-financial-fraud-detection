@@ -16,6 +16,10 @@ reproducibility and the strength of its statistical claims.
   probability distribution better or worse, independent of how good the strategy actually is once
   thresholds are chosen properly. Fixed so every strategy is scored at its own validation-tuned
   threshold; `results/metrics/phase2_imbalance_comparison.csv` gains a `threshold` column.
+  **Concrete effect, real data:** F1 across the four strategies moved from 0.11-0.62 (fixed 0.5
+  threshold) to 0.67-0.75 (tuned per strategy) - not just a different number, but a materially
+  different, less dramatic spread between strategies, since 0.5 was penalising some strategies'
+  probability distributions much more unfairly than others.
 
 - **LIME stability test was tautological on first integration.** The `lime_builder()` function
   wired into `run_pipeline.py`'s Phase 6 (and `explanation_stability.py`'s own standalone entry
