@@ -60,12 +60,33 @@ ai-fraud-detection/
 - Python 3.11
 - Kaggle account with API access (for dataset download in Phase 1)
 
+### Supported platforms
+
+Developed and the committed results generated on **Windows 11**. `requirements.txt` is now
+fully pinned to the exact versions that produced those results, and is platform-neutral - it no
+longer pulls in `pywinpty` (a Windows-only dependency that used to break installation on macOS/
+Linux), since `jupyter` was moved out to the optional `requirements-dev.txt` (only needed to open
+`notebooks/01_eda.ipynb` interactively - not required to run the pipeline or the test suite).
+CI (`.github/workflows/tests.yml`) runs the test suite on `ubuntu-latest` as an independent
+cross-platform check.
+
+**macOS only:** XGBoost needs OpenMP, which isn't bundled by default:
+
+```bash
+brew install libomp
+```
+
+Without this, `import xgboost` fails on macOS even with `requirements.txt` correctly installed.
+
 ## Setup
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# optional, only needed to run the EDA notebook interactively:
+pip install -r requirements-dev.txt
 ```
 
 ### Dataset
@@ -109,8 +130,23 @@ python -m src.preprocessing
 # (appends to results/metrics/model_comparison.csv, saves models to results/models/)
 python -m src.baseline_models
 
+# Phase 3b — statistical robustness for the baselines: repeated CV, bootstrap
+# confidence intervals, calibration (requires Phase 3 to have run first)
+python -m src.robust_evaluation
+
+# Phase 3c — operational relevance: precision/recall at fixed alert capacity,
+# cost-sensitivity sweep, chronological-split robustness check
+# (requires Phase 3 to have run first for the first two; downloads/uses the
+# raw dataset directly for the chronological split)
+python -m src.operational_evaluation
+
 # Phase 4 — RXT (ResNeXt-embedded GRU): held-out test evaluation + 5-fold CV
 python -m src.rxt_model
+
+# Phase 6b — LIME/SHAP explanation stability (reruns the same explanation
+# multiple times to check how much it varies) - reloads already-persisted
+# Random Forest and RXT models, so Phase 3 and 4 must have run first
+python -m src.explanation_stability
 
 # Phase 5 — cross-model ROC/PR curves + grouped bar chart
 # (requires Phase 3 and Phase 4 to have been run first)
@@ -250,3 +286,14 @@ explanations, the amount-by-error-type box plot, the training-time chart) are in
 `results/figures/`; the 5-fold CV summary for RXT is in `results/metrics/rxt_kfold_summary.csv`;
 efficiency numbers are in `results/metrics/efficiency_comparison.csv`; full run provenance
 (library/platform versions, split sizes, best model) is in `results/metrics/run_metadata.json`.
+
+### Statistical robustness and operational analysis
+
+Beyond the headline single-split comparison above, `src/robust_evaluation.py`,
+`src/operational_evaluation.py`, and `src/explanation_stability.py` add repeated cross-validation,
+bootstrap confidence intervals, calibration, alert-capacity/cost-sensitivity analysis, a
+chronological-split robustness check, and explanation-stability testing. See CHANGELOG.md's
+"Results" section for the real numbers this produced - notably, Random Forest's and RXT's
+bootstrap F1 confidence intervals **do not overlap** (Random Forest strictly ahead), which is
+stronger evidence than the single point-estimate comparison alone that the tree-ensemble
+advantage over RXT is real rather than a single-split artefact.

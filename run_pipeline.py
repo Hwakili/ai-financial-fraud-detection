@@ -132,6 +132,60 @@ def main():
     evaluate.plot_amount_by_error_type(X_test, y_test, y_proba_best, best_threshold, best_model_name)
 
     print("\n" + "=" * 60)
+    print("PHASE 6b — Explanation stability testing")
+    print("=" * 60)
+    import lime.lime_tabular
+
+    from src.explanation_stability import run_stability_suite
+
+    def lime_builder():
+        # Deliberately NO random_state here, unlike explain.py's one-shot LIME
+        # call. A fixed seed would make every "fresh" explainer below produce
+        # identical perturbations on every rerun, making the stability test
+        # tautological (guaranteed zero variance) instead of measuring the
+        # real rerun-to-rerun variability a genuine "explain this transaction
+        # again" workflow would see.
+        return lime.lime_tabular.LimeTabularExplainer(
+            X_train.values, feature_names=feature_names,
+            class_names=["Genuine", "Fraud"], mode="classification",
+        )
+
+    # Random Forest: LIME stability only - SHAP TreeExplainer is exact (no
+    # sampling), so there is nothing to test there (see module docstring).
+    rf_model = models["Random Forest"]
+    rf_threshold = baseline_metrics["Random Forest"]["threshold"]
+    rf_proba_test = rf_model.predict_proba(X_test)[:, 1]
+    rf_pred_test = (rf_proba_test >= rf_threshold).astype(int)
+    rf_tp_idx = explain.select_instructive_cases(y_test, rf_pred_test, None).get("true_positive_fraud_caught")
+
+    if rf_tp_idx is not None:
+        run_stability_suite(
+            lime_explainer_builder=lime_builder,
+            lime_predict_proba_fn=rf_model.predict_proba,
+            lime_instance=X_test.iloc[rf_tp_idx].values,
+            feature_names=feature_names,
+            model_name="Random Forest",
+        )
+
+    # RXT: LIME stability + SHAP KernelExplainer stability - both are
+    # sampling-based for this model, unlike TreeExplainer for the baselines.
+    rxt_proba_test = rxt_predict_fn(X_test.values)
+    rxt_pred_test = (rxt_proba_test >= rxt_metrics["threshold"]).astype(int)
+    rxt_tp_idx = explain.select_instructive_cases(y_test, rxt_pred_test, None).get("true_positive_fraud_caught")
+
+    if rxt_tp_idx is not None:
+        run_stability_suite(
+            lime_explainer_builder=lime_builder,
+            lime_predict_proba_fn=rxt_predict_proba,
+            lime_instance=X_test.iloc[rxt_tp_idx].values,
+            feature_names=feature_names,
+            rxt_predict_fn=rxt_predict_fn,
+            rxt_X_background=X_train.values,
+            rxt_instance=X_test.iloc[rxt_tp_idx].values,
+            model_name="RXT",
+        )
+
+    print("\n" + "=" * 60)
     print("PHASE 7 — Computational efficiency benchmarking")
     print("=" * 60)
     single_row = X_test.iloc[[0]]

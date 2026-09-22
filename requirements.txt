@@ -1,29 +1,28 @@
 # Core data handling
-numpy
-pandas
+numpy==2.4.6
+pandas==3.0.5
 
 # Baseline ML (Phase 3)
-scikit-learn
-xgboost
-imbalanced-learn
+scikit-learn==1.9.0
+xgboost==3.2.0
+imbalanced-learn==0.14.2
 
 # Deep learning — RXT model (Phase 4)
-tensorflow
+tensorflow==2.21.0
 
 # Explainability (Phase 6)
-shap
-lime
+shap==0.51.0
+lime==0.2.0.1
 
 # Visualisation (Phase 1, 5)
-matplotlib
-seaborn
+matplotlib==3.11.1
+seaborn==0.13.2
 
 # Dataset acquisition (Phase 1)
-kagglehub
+kagglehub==1.0.2
 
 # Utilities
-joblib
+joblib==1.5.3
 
-# Development environment
-jupyter
-pytest
+# Testing (needed by CI, not just local dev)
+pytest==9.1.1

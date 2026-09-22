@@ -1,0 +1,5 @@
+model,brier_score,n_bins,figure_path
+Logistic Regression,0.022377478104116475,10,C:\Users\hamza\OneDrive\MSc Assignment\MSc Project\GitHub Code\ai-fraud-detection\results\figures\calibration_logistic_regression.png
+Random Forest,0.00042733050103577826,10,C:\Users\hamza\OneDrive\MSc Assignment\MSc Project\GitHub Code\ai-fraud-detection\results\figures\calibration_random_forest.png
+XGBoost,0.00043349963380023837,10,C:\Users\hamza\OneDrive\MSc Assignment\MSc Project\GitHub Code\ai-fraud-detection\results\figures\calibration_xgboost.png
+RXT (ResNeXt-GRU),0.04341106116771698,10,C:\Users\hamza\OneDrive\MSc Assignment\MSc Project\GitHub Code\ai-fraud-detection\results\figures\calibration_rxt_(resnext-gru).png

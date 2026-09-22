@@ -112,3 +112,32 @@ def test_compare_imbalance_strategies_uses_validation_set(synthetic_df):
     assert "f1" in comparison.columns
     assert "pr_auc" in comparison.columns
     assert "mcc" in comparison.columns
+    assert "threshold" in comparison.columns
+
+
+def test_compare_imbalance_strategies_scores_each_strategy_at_its_own_tuned_threshold(synthetic_df, monkeypatch):
+    """Each strategy's row must reflect select_threshold() applied to that
+    strategy's own validation predictions, not an implicit fixed 0.5 cutoff -
+    the inconsistency this function was fixed to remove. Verified by directly
+    checking select_threshold is invoked once per strategy, rather than
+    asserting on a numeric outcome that could coincidentally resemble the old
+    (always-0.5) behaviour."""
+    X_train, X_val, X_test, y_train, y_val, y_test = preprocessing.load_and_split(synthetic_df)
+    X_train_scaled, X_val_scaled, X_test_scaled, _ = preprocessing.scale_features(X_train, X_val, X_test)
+
+    call_count = 0
+    real_select_threshold = preprocessing.select_threshold
+
+    def counting_select_threshold(y_true, y_proba):
+        nonlocal call_count
+        call_count += 1
+        return real_select_threshold(y_true, y_proba)
+
+    monkeypatch.setattr(preprocessing, "select_threshold", counting_select_threshold)
+
+    comparison = preprocessing.compare_imbalance_strategies(
+        X_train_scaled, y_train, X_val_scaled, y_val
+    )
+
+    assert call_count == len(comparison), "select_threshold must be called once per strategy, not skipped"
+    assert comparison["threshold"].notna().all()

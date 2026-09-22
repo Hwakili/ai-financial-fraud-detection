@@ -35,7 +35,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from src import config
-from src.evaluate import compute_metrics
+from src.evaluate import compute_metrics, select_threshold
 
 # SMOTE/undersampling ratios, as a design decision worth stating explicitly:
 #
@@ -143,6 +143,24 @@ def compare_imbalance_strategies(X_train, y_train, X_val, y_val) -> pd.DataFrame
 
     This is a fast diagnostic (Phase 2), not the final baseline suite (Phase 3) -
     its only purpose is to decide which imbalance strategy carries forward.
+
+    Threshold protocol (fixed after further investigation): each strategy's model is
+    scored at ITS OWN validation-tuned threshold via select_threshold(), exactly
+    the same rule Phase 3/4/5 use for the final comparison. An earlier version
+    of this function scored every strategy with model.predict() - an implicit
+    fixed 0.5 cutoff - while the final results elsewhere in this project use a
+    validation-tuned threshold. That mismatch meant this diagnostic and the
+    final comparison were not measuring like-for-like: a strategy could look
+    artificially strong or weak here purely because 0.5 suited its probability
+    distribution better or worse, independent of how good the strategy actually
+    is once thresholds are chosen properly for each one. Note this diagnostic
+    still tunes and scores the threshold on the SAME validation split (there is
+    no further inner split at this fast-diagnostic stage) - a narrower form of
+    the leakage the three-way split exists to avoid elsewhere. Treat this
+    function's numbers as directional evidence for choosing a strategy, not as
+    the final reported metric for any strategy - Phase 3/5's fresh
+    train/validation/test protocol is what should be cited as the dissertation's
+    headline result.
     """
     results = []
 
@@ -164,16 +182,20 @@ def compare_imbalance_strategies(X_train, y_train, X_val, y_val) -> pd.DataFrame
         model.fit(X_res, y_res)
         train_time = time.time() - start
 
-        y_pred = model.predict(X_val)
         y_proba = model.predict_proba(X_val)[:, 1]
+        threshold = select_threshold(y_val, y_proba)
+        y_pred = (y_proba >= threshold).astype(int)
+
         metrics = compute_metrics(y_val, y_pred, y_proba)
         metrics["strategy"] = name
+        metrics["threshold"] = threshold
         metrics["train_time_sec"] = round(train_time, 4)
         results.append(metrics)
 
     df_results = pd.DataFrame(results).set_index("strategy")
     column_order = [
-        "accuracy", "precision", "recall", "f1", "auc_roc", "pr_auc", "mcc", "train_time_sec"
+        "accuracy", "precision", "recall", "f1", "auc_roc", "pr_auc", "mcc",
+        "threshold", "train_time_sec",
     ]
     return df_results[column_order]
 

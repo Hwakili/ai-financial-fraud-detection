@@ -1,0 +1,10 @@
+# Optional local development dependencies - NOT required to run the pipeline
+# or the test suite. Kept separate from requirements.txt because jupyter
+# pulls in pywinpty as a transitive dependency on Windows (via terminado),
+# which has no equivalent on macOS/Linux and breaks `pip install` there if
+# it ends up in the core requirements file.
+#
+# Install with:
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+jupyter==1.1.1
