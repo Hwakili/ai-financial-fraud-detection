@@ -189,6 +189,8 @@ def train_rxt_kfold(
     fold_results = []
 
     for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X_array, y_array)):
+        fold_start = time.time()
+        print(f"  RXT k-fold: starting fold {fold_idx + 1}/{n_splits}...", flush=True)
         X_fold_train, X_fold_val = X_array[train_idx], X_array[val_idx]
         y_fold_train, y_fold_val = y_array[train_idx], y_array[val_idx]
 
@@ -211,6 +213,8 @@ def train_rxt_kfold(
         metrics["threshold"] = threshold
         metrics["fold"] = fold_idx
         fold_results.append(metrics)
+        print(f"  RXT k-fold: fold {fold_idx + 1}/{n_splits} done in {time.time() - fold_start:.1f}s "
+              f"(f1={metrics['f1']:.3f})", flush=True)
 
     results_df = pd.DataFrame(fold_results).set_index("fold")
     return results_df

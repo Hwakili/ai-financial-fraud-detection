@@ -30,6 +30,8 @@ explainability discussion alongside the existing PCA-anonymisation
 limitation, not just asserted.
 """
 
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -71,9 +73,11 @@ def lime_stability_test(
     all_top_k_sets = []
     per_feature_weights = {}
 
-    for _ in range(n_reruns):
+    for i in range(n_reruns):
+        rerun_start = time.time()
         explainer = explainer_builder()
         explanation = explainer.explain_instance(instance, predict_proba_fn, num_features=num_features)
+        print(f"    LIME rerun {i + 1}/{n_reruns} done in {time.time() - rerun_start:.1f}s", flush=True)
         weights = dict(explanation.as_list())
 
         # LIME's as_list() keys are human-readable condition strings - either
@@ -147,11 +151,13 @@ def shap_kernel_stability_test(
 
     all_values = []
     for i in range(n_reruns):
+        rerun_start = time.time()
         background = shap.sample(X_background, n_background, random_state=config.RANDOM_SEED + i)
         explainer = shap.KernelExplainer(predict_fn, background)
         values = explainer.shap_values(instance.reshape(1, -1), nsamples=nsamples)
         values = np.asarray(values).flatten()
         all_values.append(values)
+        print(f"    SHAP KernelExplainer rerun {i + 1}/{n_reruns} done in {time.time() - rerun_start:.1f}s", flush=True)
 
     all_values = np.array(all_values)  # shape: (n_reruns, n_features)
 
@@ -180,17 +186,17 @@ def run_stability_suite(
     """
     config.ensure_directories()
 
-    print(f"Running LIME stability test for {model_name} (this may take a minute)...")
+    print(f"Running LIME stability test for {model_name} (this may take a minute)...", flush=True)
     lime_result = lime_stability_test(lime_explainer_builder, lime_predict_proba_fn, lime_instance, feature_names)
     lime_result["feature_variability"].to_csv(
         config.RESULTS_METRICS_DIR / f"lime_stability_{model_name.lower().replace(' ', '_')}.csv", index=False
     )
-    print(f"  Mean pairwise Jaccard (top-{lime_result['top_k']} features): {lime_result['mean_pairwise_jaccard']:.3f}")
+    print(f"  Mean pairwise Jaccard (top-{lime_result['top_k']} features): {lime_result['mean_pairwise_jaccard']:.3f}", flush=True)
 
     shap_result = None
     if rxt_predict_fn is not None:
         print(f"Running SHAP KernelExplainer stability test for {model_name} (this is slow - "
-              f"{10} reruns x {100} samples each)...")
+              f"{10} reruns x {100} samples each)...", flush=True)
         shap_result = shap_kernel_stability_test(rxt_predict_fn, rxt_X_background, rxt_instance)
         shap_result.to_csv(
             config.RESULTS_METRICS_DIR / f"shap_stability_{model_name.lower().replace(' ', '_')}.csv", index=False
