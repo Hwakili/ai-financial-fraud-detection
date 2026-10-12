@@ -1,8 +1,8 @@
 # AI for Fraud Detection in Financial Transactions
 
 MSc Cyber Security dissertation project (Manchester Metropolitan University, module 6G7V0007).
-Develops and critically compares AI models — baseline classifiers (Logistic Regression, Random
-Forest, XGBoost) and a ResNeXt-embedded GRU deep learning architecture ("RXT") — for detecting
+Develops and critically compares AI models- baseline classifiers (Logistic Regression, Random
+Forest, XGBoost) and a ResNeXt-embedded GRU deep learning architecture ("RXT")  for detecting
 fraudulent credit card transactions under severe class imbalance, with an emphasis on
 explainability (SHAP/LIME) and computational efficiency for real-time deployment feasibility.
 
