@@ -215,7 +215,7 @@ LIME explanations in Phase 6.
 > full explanation and before/after numbers). The table below reflects the corrected pipeline:
 > a proper train/validation/test split, with each model's threshold tuned on the validation set
 > and applied once to the held-out test set. **These figures are taken directly from the current
-> `results/metrics/model_comparison.csv` and `results/metrics/rxt_kfold_summary.csv` — verify
+> `results/metrics/model_comparison.csv` and `results/metrics/rxt_kfold_summary.csv` verify
 > against those files if this README is ever edited again, rather than trusting narrative text
 > in isolation.**
 
