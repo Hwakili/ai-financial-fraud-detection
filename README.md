@@ -211,7 +211,7 @@ LIME explanations in Phase 6.
 
 > **These numbers supersede an earlier version of this README.** The previous results were
 > produced with a hardcoded 0.5 classification threshold, which badly collapsed precision for
-> every class-weighted model (Logistic Regression and RXT especially — see CHANGELOG.md for the
+> every class-weighted model (Logistic Regression and RXT especially, see CHANGELOG.md for the
 > full explanation and before/after numbers). The table below reflects the corrected pipeline:
 > a proper train/validation/test split, with each model's threshold tuned on the validation set
 > and applied once to the held-out test set. **These figures are taken directly from the current
